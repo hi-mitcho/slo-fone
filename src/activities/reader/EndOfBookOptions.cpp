@@ -207,6 +207,6 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   // since construction (reader menu rotate).
   renderUi();
 
-  const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

@@ -23,13 +23,6 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 
-namespace {
-
-// Guards against an unsynced RTC reading near 0: treats any epoch before this
-// (~2023-11-14) as "clock not synced yet" rather than a stale-but-valid fetch.
-constexpr time_t MIN_PLAUSIBLE_EPOCH = 1700000000;
-constexpr uint32_t CACHE_FRESH_SECONDS = 3600;  // SLO-8: refresh on entry, capped hourly
-
 StrId conditionLabel(uint8_t wmoCode) {
   if (wmoCode == 0) return StrId::STR_WEATHER_COND_CLEAR;
   if (wmoCode <= 3) return StrId::STR_WEATHER_COND_CLOUDY;
@@ -42,6 +35,70 @@ StrId conditionLabel(uint8_t wmoCode) {
   if (wmoCode >= 95) return StrId::STR_WEATHER_COND_THUNDERSTORM;
   return StrId::STR_WEATHER_COND_UNKNOWN;
 }
+
+// Guards against an unsynced RTC reading near 0: treats any epoch before this
+// (~2023-11-14) as "clock not synced yet" rather than a stale-but-valid fetch.
+constexpr time_t MIN_PLAUSIBLE_EPOCH = 1700000000;
+constexpr uint32_t CACHE_FRESH_SECONDS = 3600;  // SLO-8/SLO-21: hourly cooldown
+
+bool weatherCacheIsFresh() {
+  const time_t now = time(nullptr);
+  const bool clockSynced = now > MIN_PLAUSIBLE_EPOCH;
+  return clockSynced && SETTINGS.weatherLastFetchUnix != 0 &&
+         (static_cast<uint32_t>(now) - SETTINGS.weatherLastFetchUnix) < CACHE_FRESH_SECONDS;
+}
+
+WeatherRefreshOutcome refreshWeatherIfWifiConnected() {
+  if (weatherCacheIsFresh()) return WeatherRefreshOutcome::Skipped;
+
+  if (WiFi.status() != WL_CONNECTED) return WeatherRefreshOutcome::NoWifi;
+
+  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+      ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
+    LOG_ERR("WTHR", "Low heap for fetch (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return WeatherRefreshOutcome::Failed;
+  }
+
+  double lat = 0;
+  double lon = 0;
+  if (sscanf(SETTINGS.weatherLocation, "%lf,%lf", &lat, &lon) != 2) {
+    LOG_ERR("WTHR", "Malformed weatherLocation: '%s'", SETTINGS.weatherLocation);
+    return WeatherRefreshOutcome::Failed;
+  }
+
+  char url[224];
+  snprintf(url, sizeof(url),
+           "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code"
+           "&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1",
+           lat, lon);
+
+  std::string body;
+  if (!HttpDownloader::fetchUrl(url, body)) {
+    LOG_ERR("WTHR", "Fetch failed");
+    return WeatherRefreshOutcome::Failed;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err || !doc["current"]["temperature_2m"].is<float>() || !doc["daily"]["temperature_2m_max"][0].is<float>() ||
+      !doc["daily"]["temperature_2m_min"][0].is<float>()) {
+    LOG_ERR("WTHR", "Unexpected response shape: %s", err ? err.c_str() : "missing fields");
+    return WeatherRefreshOutcome::Failed;
+  }
+
+  const time_t now = time(nullptr);
+  SETTINGS.weatherLastTempF = static_cast<int16_t>(lroundf(doc["current"]["temperature_2m"].as<float>()));
+  SETTINGS.weatherLastHiF = static_cast<int16_t>(lroundf(doc["daily"]["temperature_2m_max"][0].as<float>()));
+  SETTINGS.weatherLastLoF = static_cast<int16_t>(lroundf(doc["daily"]["temperature_2m_min"][0].as<float>()));
+  SETTINGS.weatherLastConditionCode = static_cast<uint8_t>(doc["current"]["weather_code"] | 0);
+  if (now > MIN_PLAUSIBLE_EPOCH) {
+    SETTINGS.weatherLastFetchUnix = static_cast<uint32_t>(now);
+  }
+  SETTINGS.saveToFile();
+  return WeatherRefreshOutcome::Success;
+}
+
+namespace {
 
 void saveLocation(const char* location) {
   strncpy(SETTINGS.weatherLocation, location, sizeof(SETTINGS.weatherLocation) - 1);
@@ -155,15 +212,8 @@ bool WeatherModuleActivity::resolveZipToLatLon(const std::string& zip, double& l
   return true;
 }
 
-bool WeatherModuleActivity::cacheIsFresh() {
-  const time_t now = time(nullptr);
-  const bool clockSynced = now > MIN_PLAUSIBLE_EPOCH;
-  return clockSynced && SETTINGS.weatherLastFetchUnix != 0 &&
-         (static_cast<uint32_t>(now) - SETTINGS.weatherLastFetchUnix) < CACHE_FRESH_SECONDS;
-}
-
 void WeatherModuleActivity::beginRefresh() {
-  if (cacheIsFresh()) {
+  if (weatherCacheIsFresh()) {
     state = State::SHOWING;
     requestUpdate();
     return;
@@ -176,62 +226,20 @@ void WeatherModuleActivity::beginRefresh() {
 }
 
 void WeatherModuleActivity::refreshIfNeeded() {
-  if (cacheIsFresh()) return;
-
-  if (WiFi.status() != WL_CONNECTED) {
-    // Defensive: beginRefresh() only reaches LOADING once WiFi is up, but the
-    // connection could still drop in the brief window before this runs.
-    LOG_INF("WTHR", "WiFi dropped before fetch could run");
-    noWifi = true;
-    return;
+  switch (refreshWeatherIfWifiConnected()) {
+    case WeatherRefreshOutcome::NoWifi:
+      // Defensive: beginRefresh() only reaches LOADING once WiFi is up, but
+      // the connection could still drop in the brief window before this runs.
+      LOG_INF("WTHR", "WiFi dropped before fetch could run");
+      noWifi = true;
+      break;
+    case WeatherRefreshOutcome::Failed:
+      fetchFailed = true;
+      break;
+    case WeatherRefreshOutcome::Skipped:
+    case WeatherRefreshOutcome::Success:
+      break;
   }
-
-  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
-      ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
-    LOG_ERR("WTHR", "Low heap for fetch (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-    fetchFailed = true;
-    return;
-  }
-
-  double lat = 0;
-  double lon = 0;
-  if (sscanf(SETTINGS.weatherLocation, "%lf,%lf", &lat, &lon) != 2) {
-    LOG_ERR("WTHR", "Malformed weatherLocation: '%s'", SETTINGS.weatherLocation);
-    fetchFailed = true;
-    return;
-  }
-
-  char url[224];
-  snprintf(url, sizeof(url),
-           "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code"
-           "&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1",
-           lat, lon);
-
-  std::string body;
-  if (!HttpDownloader::fetchUrl(url, body)) {
-    LOG_ERR("WTHR", "Fetch failed");
-    fetchFailed = true;
-    return;
-  }
-
-  JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err || !doc["current"]["temperature_2m"].is<float>() || !doc["daily"]["temperature_2m_max"][0].is<float>() ||
-      !doc["daily"]["temperature_2m_min"][0].is<float>()) {
-    LOG_ERR("WTHR", "Unexpected response shape: %s", err ? err.c_str() : "missing fields");
-    fetchFailed = true;
-    return;
-  }
-
-  const time_t now = time(nullptr);
-  SETTINGS.weatherLastTempF = static_cast<int16_t>(lroundf(doc["current"]["temperature_2m"].as<float>()));
-  SETTINGS.weatherLastHiF = static_cast<int16_t>(lroundf(doc["daily"]["temperature_2m_max"][0].as<float>()));
-  SETTINGS.weatherLastLoF = static_cast<int16_t>(lroundf(doc["daily"]["temperature_2m_min"][0].as<float>()));
-  SETTINGS.weatherLastConditionCode = static_cast<uint8_t>(doc["current"]["weather_code"] | 0);
-  if (now > MIN_PLAUSIBLE_EPOCH) {
-    SETTINGS.weatherLastFetchUnix = static_cast<uint32_t>(now);
-  }
-  SETTINGS.saveToFile();
 }
 
 void WeatherModuleActivity::loop() {

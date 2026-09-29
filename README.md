@@ -12,6 +12,26 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
+---
+
+## This fork
+
+This is [@hi-mitcho](https://github.com/hi-mitcho)'s personal fork, running on an Xteink X4. The goal: a dedicated device for the handful of things that pull me to my phone for no good reason — reading, saved articles, weather, today's reminders — so those stop being an excuse to open everything else.
+
+![SLO FONE Home Screen mockup](./docs/images/slo-fone-home-mock.png)
+
+On top of upstream CrossPoint, this fork adds:
+
+- **Home Screen card grid** — a 2-column dashboard replacing the stock home screen, with Continue Reading, Weather, Top 3 Today, and Next Articles cards.
+- **Article Module** — syncs saved articles from Readwise Reader, with offline full-text caching so recent articles open with no network call.
+- **Weather Module** — current conditions from Open-Meteo.
+- **Reminders Module** — today's top 3 items from a dedicated Apple Reminders list.
+- **Branding pass** — custom boot splash, League Mono/Inter fonts.
+
+Mostly for my own use; see [`PRD.md`](../PRD.md) for the full spec and rationale. Everything else in this document describes upstream CrossPoint.
+
+---
+
 > If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
 
 ## What can CrossPoint do?

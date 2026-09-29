@@ -135,7 +135,8 @@ enum UIIcon {
   Hotspot,
   Bookmark,
   Usb,
-  Blocks
+  Blocks,
+  Download
 };
 
 // Default theme implementation (Classic Theme)
@@ -231,7 +232,23 @@ class BaseTheme {
   // wrapping to two lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(const GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight, int singleLineYOffset);
+  // Constant-width stroke from (x1,y1) to (x2,y2), via a filled quad offset
+  // perpendicular to the segment on both sides by width/2. Unlike
+  // GfxRenderer::drawLine's lineWidth overload (which just repeats the line
+  // offset in Y -- adds no visible width to a vertical segment), this renders
+  // the same apparent weight regardless of the segment's angle. Falls back to
+  // a plain Bresenham line below width 1.5, where that offset rounds to a
+  // near-empty sliver on a diagonal.
+  static void drawThickLine(const GfxRenderer& renderer, int x1, int y1, int x2, int y2, float width);
+  // Stroke weight used for the side-button arrow glyphs (drawSideButtonArrows)
+  // and shared with anything meant to read as the same visual weight, e.g.
+  // RoundedRaffTheme's button-hint underlines.
+  static constexpr float kArrowGlyphLineWidth = 1.5f;
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  // Small up/down triangle glyphs at the physical side-button locations, with
+  // no box or label. For list screens (UiListActivity) where the side buttons
+  // scroll the list but drawSideButtonHints' boxed labels would be too heavy.
+  virtual void drawSideButtonArrows(GfxRenderer& renderer) const;
   // Menu row height as DRAWN by drawButtonMenu. HomeActivity builds its touch
   // grid from this, so hit bands always match the visuals (RoundedRaff derives
   // its row height from the font, not the metrics table).

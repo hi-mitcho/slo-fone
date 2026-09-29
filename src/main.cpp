@@ -112,15 +112,21 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&notosans_8_regular);
+EpdFont smallFont(&leaguemono_8_semibold);
 EpdFontFamily smallFontFamily(&smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
+// Display font for card titles (Home Screen card grid). Only one weight is
+// available, so it's registered as the family's "regular" slot; requesting
+// BOLD/ITALIC falls back to it automatically (EpdFontFamily::getFont).
+EpdFont responder18ItalicFont(&responder_18_italic);
+EpdFontFamily responder18FontFamily(&responder18ItalicFont);
+
+EpdFont ui10RegularFont(&inter_10_regular);
+EpdFont ui10BoldFont(&inter_10_bold);
 EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
+EpdFont ui12RegularFont(&inter_12_regular);
+EpdFont ui12BoldFont(&inter_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
@@ -131,7 +137,8 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
-constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_SETTINGS;
+constexpr uint32_t SILENT_REBOOT_TARGET_ARTICLE_READ = 3;
+constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_ARTICLE_READ;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
 
 // How the device is coming back to life, resolved once at boot. Both resume
@@ -184,6 +191,15 @@ void silentRestart() { silentRestartTo(SILENT_REBOOT_TARGET_HOME, "home"); }
 void silentRestartToReader() { silentRestartTo(SILENT_REBOOT_TARGET_READER, "reader"); }
 
 void silentRestartToSettings() { silentRestartTo(SILENT_REBOOT_TARGET_SETTINGS, "settings"); }
+
+void silentRestartToArticleRead(const std::string& articleId) {
+  if (deepSleepInProgress)
+    return;  // matches silentRestartTo's own guard; checked here too since
+             // APP_STATE must not be mutated on a reboot that won't happen
+  APP_STATE.pendingArticleReadId = articleId;
+  APP_STATE.saveToFile();
+  silentRestartTo(SILENT_REBOOT_TARGET_ARTICLE_READ, "article-read");
+}
 
 void restartToHomeAfterStorageHandoff() {
   if (deepSleepInProgress) return;  // sleeping supersedes the storage handoff reboot
@@ -329,6 +345,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.insertFont(RESPONDER_18_FONT_ID, responder18FontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -542,6 +559,14 @@ void setup() {
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_SETTINGS) {
     // Back out of the WiFi rows and the user is where they left off, not on Home.
     activityManager.goToSettings();
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_ARTICLE_READ &&
+             !APP_STATE.pendingArticleReadId.empty()) {
+    // Resyncs the article list (fresh metadata beats a stale pre-reboot
+    // copy) then auto-opens and starts reading this id once it lands.
+    const auto articleId = APP_STATE.pendingArticleReadId;
+    APP_STATE.pendingArticleReadId.clear();
+    APP_STATE.saveToFile();
+    activityManager.goToArticleModule(articleId, /*autoReadPendingArticle=*/true);
   } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale

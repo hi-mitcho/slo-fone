@@ -35,10 +35,27 @@ class ReadwiseClient {
   // manually triage into "later", so filtering to just "later" hid them.
   // "archive" and "feed" (RSS) are excluded client-side. Manual/on-demand
   // only (SLO-6) — no incremental updatedAfter tracking in this first slice.
-  static Error listUnarchived(std::vector<ReadwiseArticle>& outArticles, int limit = 50);
+  //
+  // Default capped at 20, not Readwise's up-to-100 max: this device's
+  // typical post-WiFi-connect free heap (~75KB, after whatever Home/EPUB
+  // rendering left resident) isn't reliably enough to buffer and parse a
+  // 50+ article response — confirmed on hardware, where listUnarchived()'s
+  // own heap guards (see ReadwiseClient.cpp) correctly refused to grow the
+  // response buffer past ~17KB rather than risk the fragmented-heap abort()
+  // that used to happen here. The offline article cache
+  // (ArticleOfflineCache::MAX_CACHED_TEXT_COUNT) only auto-downloads full
+  // text for the newest 5 anyway, so a long tail beyond ~20 buys little.
+  static Error listUnarchived(std::vector<ReadwiseArticle>& outArticles, int limit = 20);
 
   // Marks a document archived.
   static Error archive(const std::string& documentId);
+
+  // Fetches the full article body as raw HTML (Readwise/Reader's
+  // Mozilla-Readability output — not guaranteed well-formed XHTML; callers
+  // must normalize before handing it to an XML-based parser). Streams the
+  // response through ReadwiseHtmlExtractor rather than buffering the whole
+  // JSON body, so this is safe to call regardless of article length.
+  static Error fetchHtmlContent(const std::string& documentId, std::string& outHtml);
 
   static int lastHttpCode;
 };

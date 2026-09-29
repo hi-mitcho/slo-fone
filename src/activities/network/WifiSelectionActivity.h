@@ -120,6 +120,7 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics);
   void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnectingSplash() const;
   void renderConnected(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
 

@@ -336,8 +336,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     case BrowserState::BROWSING: {
       const char* confirmLabel =
           (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-      const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
-      labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
+      const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : "";
+      labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, "");
       break;
     }
     case BrowserState::DOWNLOADING:

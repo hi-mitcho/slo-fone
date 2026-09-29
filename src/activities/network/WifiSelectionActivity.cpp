@@ -15,6 +15,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "images/WifiConnecting.h"
 
 namespace fui = freeink::ui;
 
@@ -833,6 +834,13 @@ void WifiSelectionActivity::render(RenderLock&&) {
     return;
   }
 
+  // Actively connecting (as opposed to just scanning) gets a full-bleed
+  // splash instead of the header + centered text used by every other state.
+  if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
+    renderConnectingSplash();
+    return;
+  }
+
   renderer.clearScreen();
 
   auto& theme = UITheme::getInstance();
@@ -853,19 +861,17 @@ void WifiSelectionActivity::render(RenderLock&&) {
 
   switch (state) {
     case WifiSelectionState::AUTO_CONNECTING:
-      renderConnecting(&screen, &metrics);
+    case WifiSelectionState::CONNECTING:
+      // Handled by the renderConnectingSplash() early-return above.
       break;
     case WifiSelectionState::SCANNING:
-      renderConnecting(&screen, &metrics);  // Reuse connecting screen with different message
+      renderConnecting(&screen, &metrics);
       break;
     case WifiSelectionState::NETWORK_LIST:
       renderNetworkList(&screen, &metrics);
       break;
     case WifiSelectionState::HIDDEN_SSID_ENTRY:
       // Transitioning to/from the SSID keyboard subactivity - nothing to draw
-      break;
-    case WifiSelectionState::CONNECTING:
-      renderConnecting(&screen, &metrics);
       break;
     case WifiSelectionState::CONNECTED:
       renderConnected(&screen, &metrics);
@@ -1026,36 +1032,41 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
 }
 
 void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const {
+  // Only reached for SCANNING now; actual connection attempts use
+  // renderConnectingSplash() instead.
   constexpr int MAX_STATUS_LINES = 2;
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = screen->y + (screen->height - height) / 2;
   const int statusX = screen->x + metrics->contentSidePadding;
   const int statusWidth = screen->width - metrics->contentSidePadding * 2;
 
-  if (state == WifiSelectionState::SCANNING) {
-    const char* statusText = autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING);
-    const Rect statusBounds{statusX, screen->y, statusWidth, screen->height};
-    UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_10_FONT_ID, statusText, MAX_STATUS_LINES);
-    if (autoConnecting) {
-      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    }
-  } else {
-    const char* statusText = autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING);
-    const Rect statusBounds{statusX, screen->y, statusWidth, top - metrics->verticalSpacing - screen->y};
-    UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_12_FONT_ID, statusText, MAX_STATUS_LINES, true,
-                                     EpdFontFamily::BOLD, UITheme::TextVerticalAlignment::BOTTOM);
-
-    std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
-    if (ssidInfo.length() > 25) {
-      ssidInfo.replace(22, ssidInfo.length() - 22, "...");
-    }
-    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, ssidInfo.c_str());
-    if (autoConnecting) {
-      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    }
+  const char* statusText = autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING);
+  const Rect statusBounds{statusX, screen->y, statusWidth, screen->height};
+  UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_10_FONT_ID, statusText, MAX_STATUS_LINES);
+  if (autoConnecting) {
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
+}
+
+void WifiSelectionActivity::renderConnectingSplash() const {
+  renderer.clearScreen();
+  // WifiConnectingImage is pre-rotated 90 degrees by the asset pipeline;
+  // drawIcon (not drawImage) is required to reproduce Portrait orientation
+  // correctly for a non-square full-screen bitmap (see BootActivity).
+  renderer.drawIcon(WifiConnectingImage, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
+
+  std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
+  if (ssidInfo.length() > 25) {
+    ssidInfo.replace(22, ssidInfo.length() - 22, "...");
+  }
+  const Rect screen{0, 0, renderer.getScreenWidth(), renderer.getScreenHeight()};
+  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, screen.height * 3 / 4, ssidInfo.c_str());
+
+  if (autoConnecting) {
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+
+  renderer.displayBuffer();
 }
 
 void WifiSelectionActivity::renderConnected(const Rect* screen, const ThemeMetrics* metrics) const {

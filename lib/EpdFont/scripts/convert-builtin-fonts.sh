@@ -63,14 +63,18 @@ ARABIC_INTERVALS=(
 
 for size in ${UI_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
-    font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
+    font_name="inter_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+    # SLO-14: general UI font swapped from Ubuntu to Inter (League Mono Narrow
+    # was tried first but not kept as the overall UI face -- it's still used,
+    # separately, for SMALL_FONT_ID/button-hint labels below).
+    font_path="../builtinFonts/source/Inter/Inter-${style}.ttf"
     hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf"
     arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${style}.ttf"
-    # Ubuntu lacks the Latin Extended Additional block (U+1EA0-U+1EF9) used for
-    # Vietnamese tone marks. Append a Vietnamese-only Ubuntu cut so those glyphs
-    # are filled from it while every glyph Ubuntu already has stays unchanged
-    # (fontstack is ordered by descending priority).
+    # Inter, like Ubuntu before it, lacks the Latin Extended Additional block
+    # (U+1EA0-U+1EF9) used for Vietnamese tone marks. Append the same
+    # Vietnamese-only Ubuntu cut so those glyphs are filled from it while every
+    # glyph Inter already has stays unchanged (fontstack is ordered by
+    # descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
     python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
@@ -79,11 +83,14 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
-python fontconvert.py notosans_8_regular 8 \
-  ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
+# SLO-14: SMALL_FONT_ID swapped from NotoSans to League Mono Narrow SemiBold
+# (single weight, like Responder -- EpdFontFamily falls back to it for
+# BOLD/ITALIC requests). This is the font the bottom button-hint pills use.
+python fontconvert.py leaguemono_8_semibold 8 \
+  ../builtinFonts/source/LeagueMono/LeagueMono-NarrowSemiBold.otf \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
   ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
-  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/notosans_8_regular.h
+  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/leaguemono_8_semibold.h
 
 echo ""
 echo "Running compression verification..."

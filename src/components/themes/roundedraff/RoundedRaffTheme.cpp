@@ -6,6 +6,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -17,12 +18,28 @@
 namespace {
 constexpr int kCoverRadius = 18;
 constexpr int kMenuRadius = 30;
-constexpr int kBottomRadius = 15;
 constexpr int kRowRadius = 20;
 constexpr int kInteractiveInsetX = 20;
 constexpr int kSelectableRowGap = 6;
 constexpr int kTitleFontId = UI_12_FONT_ID;  // Requested main title size: 12px
 constexpr int kGuideFontId = SMALL_FONT_ID;  // Closest available to requested 6px
+
+// SLO-14: button-hint labels are uppercase with an underline, always on (not
+// tied to a press state).
+std::string toUpperAscii(const std::string& s) {
+  std::string out = s;
+  for (char& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return out;
+}
+
+void drawUnderlinedLabel(const GfxRenderer& renderer, int fontId, int x, int y, const char* label) {
+  if (!label || label[0] == '\0') return;
+  renderer.drawText(fontId, x, y, label, true, EpdFontFamily::REGULAR);
+  const int width = renderer.getTextWidth(fontId, label, EpdFontFamily::REGULAR);
+  const int underlineY = y + renderer.getTextHeight(fontId) + 2;
+  // Same stroke weight as the side-button arrow glyphs (BaseTheme::drawSideButtonArrows).
+  BaseTheme::drawThickLine(renderer, x, underlineY, x + width - 1, underlineY, BaseTheme::kArrowGlyphLineWidth);
+}
 
 void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pageStartIndex, int pageItems) {
   if (itemCount <= 0 || pageItems <= 0 || itemCount <= pageItems) {
@@ -224,17 +241,16 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const bool backDisabled = (btn1 == nullptr || btn1[0] == '\0');
   const int leftGroupX = sidePadding;
   const int rightGroupX = leftGroupX + groupWidth + groupGap;
-  const std::string backLabel = backDisabled ? "" : std::string(btn1);
+  const std::string backLabel = backDisabled ? "" : toUpperAscii(btn1);
   // Callers should provide the button labels. If a label is not specified, it should render empty.
-  const std::string selectText = (btn2 && btn2[0] != '\0') ? std::string(btn2) : "";
-  const std::string upText = (btn3 && btn3[0] != '\0') ? std::string(btn3) : "";
-  const std::string downText = (btn4 && btn4[0] != '\0') ? std::string(btn4) : "";
+  const std::string selectText = (btn2 && btn2[0] != '\0') ? toUpperAscii(btn2) : "";
+  const std::string upText = (btn3 && btn3[0] != '\0') ? toUpperAscii(btn3) : "";
+  const std::string downText = (btn4 && btn4[0] != '\0') ? toUpperAscii(btn4) : "";
 
   // Ensure button hints always "win" visually even if other elements accidentally render into this area.
   renderer.fillRect(leftGroupX, hintY, groupWidth, hintHeight, false);
   renderer.fillRect(rightGroupX, hintY, groupWidth, hintHeight, false);
 
-  renderer.drawRoundedRect(leftGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
   const int selectWidth = renderer.getTextWidth(kGuideFontId, selectText.c_str(), EpdFontFamily::REGULAR);
   const int downWidth = renderer.getTextWidth(kGuideFontId, downText.c_str(), EpdFontFamily::REGULAR);
   constexpr int innerEdgePadding = 16;
@@ -245,14 +261,12 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int downX = rightGroupX + groupWidth - innerEdgePadding - downWidth;
 
   if (!backDisabled) {
-    renderer.drawText(kGuideFontId, backX, textY, backLabel.c_str(), true, EpdFontFamily::REGULAR);
+    drawUnderlinedLabel(renderer, kGuideFontId, backX, textY, backLabel.c_str());
   }
-  renderer.drawText(kGuideFontId, selectX, textY, selectText.c_str(), true, EpdFontFamily::REGULAR);
+  drawUnderlinedLabel(renderer, kGuideFontId, selectX, textY, selectText.c_str());
 
-  renderer.drawRoundedRect(rightGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
-
-  renderer.drawText(kGuideFontId, upX, textY, upText.c_str(), true, EpdFontFamily::REGULAR);
-  renderer.drawText(kGuideFontId, downX, textY, downText.c_str(), true, EpdFontFamily::REGULAR);
+  drawUnderlinedLabel(renderer, kGuideFontId, upX, textY, upText.c_str());
+  drawUnderlinedLabel(renderer, kGuideFontId, downX, textY, downText.c_str());
 
   renderer.setOrientation(origOrientation);
 }

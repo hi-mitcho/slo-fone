@@ -949,7 +949,7 @@ void FontDownloadActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
   } else if (state_ == GROUP_LIST) {
     renderUi();
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
     renderUi();
@@ -959,8 +959,7 @@ void FontDownloadActivity::render(RenderLock&&) {
                                : isSelectedFamilyDeletable()  ? tr(STR_DELETE)
                                : isUpdateAllRow(nav.selected) ? tr(STR_UPDATE)
                                                               : tr(STR_DOWNLOAD);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, hasVisibleFamilies ? tr(STR_DIR_UP) : "",
-                                              hasVisibleFamilies ? tr(STR_DIR_DOWN) : "");
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];

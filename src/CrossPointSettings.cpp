@@ -123,6 +123,18 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     doc["weatherLastLoF"] = weatherLastLoF;
     doc["weatherLastConditionCode"] = weatherLastConditionCode;
   }
+
+  // Article Module: not in SettingsList (array/uint32_t don't fit the
+  // uint8_t generic loop). Omitted while never-synced.
+  if (articlesLastSyncUnix != 0) {
+    JsonArray titles = doc["articlesTitles"].to<JsonArray>();
+    JsonArray ids = doc["articlesIds"].to<JsonArray>();
+    for (uint8_t i = 0; i < articlesCachedTitleCount; i++) {
+      titles.add(articlesTitles[i]);
+      ids.add(articlesIds[i]);
+    }
+    doc["articlesLastSyncUnix"] = articlesLastSyncUnix;
+  }
 }
 
 bool CrossPointSettings::fromJson(JsonVariantConst doc) {
@@ -264,6 +276,21 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     weatherLastHiF = doc["weatherLastHiF"] | (int16_t)0;
     weatherLastLoF = doc["weatherLastLoF"] | (int16_t)0;
     weatherLastConditionCode = doc["weatherLastConditionCode"] | (uint8_t)0;
+  }
+
+  if (doc["articlesLastSyncUnix"].is<uint32_t>()) {
+    articlesLastSyncUnix = doc["articlesLastSyncUnix"].as<uint32_t>();
+    JsonArrayConst titles = doc["articlesTitles"];
+    JsonArrayConst ids = doc["articlesIds"];
+    articlesCachedTitleCount = 0;
+    auto idIt = ids.begin();
+    for (JsonVariantConst title : titles) {
+      if (articlesCachedTitleCount >= ARTICLES_CACHED_TITLE_COUNT) break;
+      copyToField(articlesTitles[articlesCachedTitleCount], title | "", sizeof(articlesTitles[0]));
+      copyToField(articlesIds[articlesCachedTitleCount], idIt != ids.end() ? (*idIt | "") : "", sizeof(articlesIds[0]));
+      if (idIt != ids.end()) ++idIt;
+      articlesCachedTitleCount++;
+    }
   }
 
   if (needsResave) {

@@ -9,6 +9,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -199,6 +200,92 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
                     textYOffset);
     }
+  }
+
+  renderer.setOrientation(orig_orientation);
+}
+
+void BaseTheme::drawThickLine(const GfxRenderer& renderer, int x1, int y1, int x2, int y2, float width) {
+  // A polygon offset by width/2 rasterizes to a near-empty sliver on a
+  // diagonal once that offset drops much below 0.5px per axis (rounding
+  // loses coverage), even though it fills fine on a pure vertical/horizontal
+  // segment where the offset lands on a single axis. Below that, fall back to
+  // Bresenham's single-pixel line, which stays fully connected at any angle.
+  if (width < 1.5f) {
+    renderer.drawLine(x1, y1, x2, y2, true);
+    return;
+  }
+  const float dx = static_cast<float>(x2 - x1);
+  const float dy = static_cast<float>(y2 - y1);
+  const float len = std::sqrt(dx * dx + dy * dy);
+  if (len < 0.5f) return;
+  const float nx = -dy / len * (width / 2.0f);
+  const float ny = dx / len * (width / 2.0f);
+  const int xs[4] = {static_cast<int>(std::lround(x1 + nx)), static_cast<int>(std::lround(x2 + nx)),
+                     static_cast<int>(std::lround(x2 - nx)), static_cast<int>(std::lround(x1 - nx))};
+  const int ys[4] = {static_cast<int>(std::lround(y1 + ny)), static_cast<int>(std::lround(y2 + ny)),
+                     static_cast<int>(std::lround(y2 - ny)), static_cast<int>(std::lround(y1 - ny))};
+  renderer.fillPolygon(xs, ys, 4);
+}
+
+namespace {
+// A vertical shaft spanning most of the button's height, with one short
+// diagonal tick forming a fork at the tip end (like a minimalist "1" mark,
+// not a symmetric chevron). pointingUp forks at the top -- shaft down, tick
+// down-left; pointing down forks at the bottom -- shaft up, tick up-left (the
+// up glyph mirrored across a horizontal axis, so both ticks lean the same
+// way). Kept one-sided so each glyph's horizontal footprint only grows toward
+// the side that has room.
+void drawTickArrowGlyph(const GfxRenderer& renderer, int x, int centerY, int halfShaft, int tickOffset,
+                        bool pointingUp) {
+  constexpr float lineWidth = BaseTheme::kArrowGlyphLineWidth;
+  const int yTop = centerY - halfShaft;
+  const int yBottom = centerY + halfShaft;
+  BaseTheme::drawThickLine(renderer, x, yTop, x, yBottom, lineWidth);
+  if (pointingUp) {
+    BaseTheme::drawThickLine(renderer, x, yTop, x - tickOffset, yTop + tickOffset, lineWidth);
+  } else {
+    BaseTheme::drawThickLine(renderer, x, yBottom, x - tickOffset, yBottom - tickOffset, lineWidth);
+  }
+}
+}  // namespace
+
+void BaseTheme::drawSideButtonArrows(GfxRenderer& renderer) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
+  // Footer-style coordinates below assume portrait geometry regardless of the
+  // device's current orientation (see drawButtonHints).
+  const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  const int screenWidth = renderer.getScreenWidth();
+  // Button zone is the 80px-tall box drawSideButtonHints draws there. The
+  // shaft spans most of that height (roughly the height of the button) and
+  // is centered in its zone.
+  constexpr int buttonZoneHeight = 80;
+  constexpr int halfShaft = 24;
+  constexpr int tickOffset = 6;
+  // Pulled in from the true screen edge -- the physical bezel/button assembly
+  // covers the outermost pixels there. Home's card grid (COL_B_WIDTH_RATIO)
+  // leaves matching extra gutter so this doesn't crowd its content.
+  constexpr int edgeMargin = 14;
+
+  if (gpio.hasEdgeSideButtons()) {
+    // Edge-button layout (X3, X4 Pro): Up on left side, Down on right side.
+    constexpr int zoneTop = 155;
+    const int centerY = zoneTop + buttonZoneHeight / 2;
+    drawTickArrowGlyph(renderer, edgeMargin, centerY, halfShaft, tickOffset, true);
+    drawTickArrowGlyph(renderer, screenWidth - edgeMargin, centerY, halfShaft, tickOffset, false);
+  } else {
+    // X4 layout: Both buttons stacked on the right side.
+    constexpr int topZoneTop = 345;
+    const int x = screenWidth - edgeMargin;
+    const int topCenterY = topZoneTop + buttonZoneHeight / 2;
+    const int bottomCenterY = topZoneTop + buttonZoneHeight + buttonZoneHeight / 2;
+    drawTickArrowGlyph(renderer, x, topCenterY, halfShaft, tickOffset, true);
+    drawTickArrowGlyph(renderer, x, bottomCenterY, halfShaft, tickOffset, false);
   }
 
   renderer.setOrientation(orig_orientation);
@@ -576,6 +663,15 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
   }
 
+  // drawCenteredText centers on the full screen width. The book tile isn't
+  // necessarily full-width (e.g. a card-grid layout passes a narrower rect),
+  // so text meant to sit on the tile is centered on bookX/bookWidth here
+  // instead.
+  auto drawTextCenteredOnBook = [&](int fontId, int y, const char* text, bool black) {
+    const int textWidth = renderer.getTextWidth(fontId, text);
+    renderer.drawText(fontId, bookX + (bookWidth - textWidth) / 2, y, text, black);
+  };
+
   if (hasContinueReading) {
     const std::string& lastBookTitle = recentBooks[0].title;
     const std::string& lastBookAuthor = recentBooks[0].author;
@@ -629,13 +725,13 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
 
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
+      drawTextCenteredOnBook(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+      drawTextCenteredOnBook(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
     }
 
     // "Continue Reading" label at the bottom
@@ -651,16 +747,16 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       const int continueBoxY = continueY - continuePadding / 2;
       renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, bookSelected);
       renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !bookSelected);
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, continueText, !bookSelected);
+      drawTextCenteredOnBook(UI_10_FONT_ID, continueY, continueText, !bookSelected);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
+      drawTextCenteredOnBook(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
     }
   } else {
     // No book to continue reading
     const int y =
         bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
+    drawTextCenteredOnBook(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK), true);
+    drawTextCenteredOnBook(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING), true);
   }
 }
 

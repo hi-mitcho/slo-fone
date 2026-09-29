@@ -123,8 +123,12 @@ void UiListActivity::drawChrome() {
 }
 
 void UiListActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Left/Right stay unlabeled: list scrolling is side Up/Down only (see
+  // MappedInputManager::mapButton()'s NavNext/NavPrevious case) so there's
+  // nothing for the front buttons to hint at here.
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawSideButtonArrows(renderer);
 }
 
 void UiListActivity::render(RenderLock&&) {

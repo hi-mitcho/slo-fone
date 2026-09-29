@@ -920,6 +920,7 @@ void LibraryListActivity::drawFooter() {
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
   const bool canSearch = tabsFocused() && !degraded;
   const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tr(STR_TOGGLE) : confirmLabel,
-                                            canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+                                            canSearch ? tr(STR_SEARCH) : "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawSideButtonArrows(renderer);
 }

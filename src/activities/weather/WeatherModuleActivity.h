@@ -3,8 +3,27 @@
 #include <functional>
 #include <string>
 
+#include "I18n.h"
 #include "activities/Activity.h"
 #include "activities/ActivityResult.h"
+
+// Maps a raw Open-Meteo WMO weather code to its condition bucket, shared with
+// HomeActivity's weather card so both places bucket codes identically.
+StrId conditionLabel(uint8_t wmoCode);
+
+// True if SETTINGS.weatherLastFetchUnix is under an hour old (and the RTC is
+// actually synced). Shared cooldown check for both the Weather Module and
+// HomeActivity's passive refresh (SLO-21).
+bool weatherCacheIsFresh();
+
+// SLO-21: HomeActivity's passive, non-interactive refresh path. Unlike
+// WeatherModuleActivity::beginRefresh(), this never brings up
+// WifiSelectionActivity — it only fetches if WiFi happens to already be
+// connected and the cache is stale, otherwise it's a silent no-op. Also used
+// by WeatherModuleActivity, which layers its own noWifi/fetchFailed UI
+// feedback on top of the outcome.
+enum class WeatherRefreshOutcome { Skipped, NoWifi, Failed, Success };
+WeatherRefreshOutcome refreshWeatherIfWifiConnected();
 
 // Weather Module: fetches current conditions + today's hi/lo from Open-Meteo
 // (SLO-8) for a manually-entered location (SLO-8: no GPS on this hardware).
@@ -44,5 +63,4 @@ class WeatherModuleActivity final : public Activity {
   void beginRefresh();
   bool resolveZipToLatLon(const std::string& zip, double& lat, double& lon);
   void refreshIfNeeded();
-  static bool cacheIsFresh();
 };

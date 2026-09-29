@@ -126,14 +126,18 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return false;
       }
     case Button::NavNext:
-      // Logical "next item" navigation: side Down + front Right, with the control axis flipped in
-      // INVERTED / LANDSCAPE_CCW under the live orientation policy, matching the rotated hint labels.
-      return isNavDirectionSwapped() ? (mapButton(Button::Up, fn) || mapButton(Button::Left, fn))
-                                     : (mapButton(Button::Down, fn) || mapButton(Button::Right, fn));
+      // Logical "next item" navigation: side Down only. Used to also accept
+      // front Right, but that duplicated a physical control the device
+      // always has (side Up/Down) and made list footers show a "Down" hint
+      // on a button that also did other, screen-specific things (e.g. the
+      // Article Module's Refresh) -- dropped so side buttons are the one
+      // way to scroll a list. Axis flipped in INVERTED / LANDSCAPE_CCW under
+      // the live orientation policy, matching the rotated hint labels.
+      return isNavDirectionSwapped() ? mapButton(Button::Up, fn) : mapButton(Button::Down, fn);
     case Button::NavPrevious:
-      // Logical "previous item" navigation: side Up + front Left, axis-flipped in the same orientations.
-      return isNavDirectionSwapped() ? (mapButton(Button::Down, fn) || mapButton(Button::Right, fn))
-                                     : (mapButton(Button::Up, fn) || mapButton(Button::Left, fn));
+      // Logical "previous item" navigation: side Up only, same reasoning and
+      // axis flip as NavNext above.
+      return isNavDirectionSwapped() ? mapButton(Button::Down, fn) : mapButton(Button::Up, fn);
     case Button::ScreenLeft:
     case Button::ScreenRight:
     case Button::ScreenUp:

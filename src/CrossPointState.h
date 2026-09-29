@@ -14,6 +14,10 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   static constexpr uint8_t SLEEP_RECENT_COUNT = 16;
 
   std::string openEpubPath;
+  // Set right before silentRestartToArticleRead()'s heap-defrag reboot
+  // (SLO-15): the id to auto-open and start reading once the article list
+  // resyncs on the far side. Cleared as soon as boot routing consumes it.
+  std::string pendingArticleReadId;
   uint16_t recentSleepImages[SLEEP_RECENT_COUNT] = {};
   uint8_t recentSleepPos = 0;
   uint8_t recentSleepFill = 0;

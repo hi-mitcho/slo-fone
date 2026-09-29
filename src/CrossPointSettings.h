@@ -368,6 +368,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // on-device Settings screen.
   char articleModuleToken[64] = "";
 
+  // Article Module: cached result of the last successful sync, so the Home
+  // Screen card has something to show without a network call. Not in
+  // SettingsList (arrays/uint32_t don't fit the generic loop); serialized
+  // manually like the Weather Module fields above.
+  static constexpr uint8_t ARTICLES_CACHED_TITLE_COUNT = 3;
+  // 80 chars: the Home card now wraps titles across lines instead of
+  // truncating to one, so it can afford to cache more than a fragment.
+  char articlesTitles[ARTICLES_CACHED_TITLE_COUNT][80] = {"", "", ""};  // most-recent-first unarchived titles
+  // Readwise document id per cached title, so the Home Screen can jump
+  // straight to ArticleDetailActivity for a tapped title instead of always
+  // opening the list. Parallel array to articlesTitles, same indexing.
+  char articlesIds[ARTICLES_CACHED_TITLE_COUNT][40] = {"", "", ""};
+  uint8_t articlesCachedTitleCount = 0;  // how many entries in articlesTitles/articlesIds are populated
+  uint32_t articlesLastSyncUnix = 0;     // epoch seconds of last successful sync, 0 = never
+
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;

@@ -93,7 +93,10 @@ class ActivityManager {
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goToWeatherModule();
-  void goToArticleModule();
+  // autoReadPendingArticle: SLO-15, only meaningful with a non-empty
+  // initialArticleId — auto-starts the full-text read flow for it instead of
+  // just opening its summary (see ArticleDetailActivity's autoRead ctor arg).
+  void goToArticleModule(std::string initialArticleId = "", bool autoReadPendingArticle = false);
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
 
   // This will move current activity to stack instead of deleting it
